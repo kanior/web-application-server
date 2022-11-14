@@ -60,6 +60,9 @@ public class HttpRequestUtils {
         Pair(String key, String value) {
             this.key = key.trim();
             this.value = value.trim();
+            int[] arr = {0};
+
+
         }
 
         public String getKey() {
