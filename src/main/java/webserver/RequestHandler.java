@@ -1,16 +1,32 @@
 package webserver;
 
-import java.io.*;
-import java.net.Socket;
-import java.nio.file.Files;
-
+import controller.Controller;
+import controller.CreateUserController;
+import controller.ListUserController;
+import controller.LoginController;
+import http.HttpRequest;
+import http.HttpResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.Socket;
+import java.util.HashMap;
+import java.util.Map;
 
 public class RequestHandler extends Thread {
     private static final Logger log = LoggerFactory.getLogger(RequestHandler.class);
 
     private Socket connection;
+    private static Map<String, Controller> requestMapper = new HashMap<>();
+
+    static {
+        requestMapper.put("/user/create", new CreateUserController());
+        requestMapper.put("/user/login", new LoginController());
+        requestMapper.put("/user/list", new ListUserController());
+    }
 
     public RequestHandler(Socket connectionSocket) {
         this.connection = connectionSocket;
@@ -20,51 +36,32 @@ public class RequestHandler extends Thread {
         log.debug("New Client Connect! Connected IP : {}, Port : {}", connection.getInetAddress(),
                 connection.getPort());
 
-        try (InputStream in = connection.getInputStream(); OutputStream out = connection.getOutputStream()) {
+        try (InputStream in = connection.getInputStream();
+             OutputStream out = connection.getOutputStream()) {
 
-            BufferedReader br = new BufferedReader(new InputStreamReader(in));
-            String line = "";
-            if ((line = br.readLine()) == null || line.equals("")) {
-                return;
+            HttpRequest request = new HttpRequest(in);
+            HttpResponse response = new HttpResponse(out);
+            String path = getDefaultPath(request.getPath());
+
+            Controller controller = requestMapper.get(path);
+            if (controller != null) {
+                controller.service(request, response);
+            } else {
+                response.forward(path);
             }
 
-            String[] tokens = line.split(" ");
-            String httpMethod = tokens[0];
-            String url = tokens[1];
-            byte[] responseBody = null;
-            if (httpMethod.equals("GET")) {
-                responseBody = Files.readAllBytes(new File("./webapp" + url).toPath());
-
-            } else if (httpMethod.equals("POST")) {
-
-            }
-
-            DataOutputStream dos = new DataOutputStream(out);
-//            byte[] responseBody = "Hello World".getBytes();
-            response200Header(dos, responseBody.length);
-            responseBody(dos, responseBody);
         } catch (IOException e) {
             log.error(e.getMessage());
         }
     }
 
-    private void response200Header(DataOutputStream dos, int lengthOfBodyContent) {
-        try {
-            dos.writeBytes("HTTP/1.1 200 OK \r\n");
-            dos.writeBytes("Content-Type: text/html;charset=utf-8\r\n");
-            dos.writeBytes("Content-Length: " + lengthOfBodyContent + "\r\n");
-            dos.writeBytes("\r\n");
-        } catch (IOException e) {
-            log.error(e.getMessage());
+    private String getDefaultPath(String path) {
+        if (path.equals("/")) {
+            return "/index.html";
         }
+        return path;
     }
 
-    private void responseBody(DataOutputStream dos, byte[] body) {
-        try {
-            dos.write(body, 0, body.length);
-            dos.flush();
-        } catch (IOException e) {
-            log.error(e.getMessage());
-        }
-    }
+
+
 }
